@@ -13,7 +13,8 @@ export const auth = new google.auth.GoogleAuth({
 
 export const googleOAuth = new google.auth.OAuth2(
   process.env.GOOGLE_DOCS_CLIEND_ID,
-  process.env.GOOGLE_DOCS_CLIENT_SECRET
+  process.env.GOOGLE_DOCS_CLIENT_SECRET,
+  "http://localhost:5001/api/auth/google/callback"
 );
 
 export const OAUTH_SCOPES = [
