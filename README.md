@@ -1,6 +1,6 @@
 # Sourceframe 
 
-RAG-style document Q&A: connect a Google account, index Google Docs / Word files into **Pinecone**, and ask questions with context retrieved from your workspace. Includes a small **React (Vite)** UI in `client/` and an **Express** API in `server/`.
+RAG-style document Q&A: connect a Google account, index Google Docs, PDF & Word files into **Pinecone**, and ask questions with context retrieved from your workspace. Includes a small **React (Vite)** UI in `client/` and an **Express** API in `server/`.
 
 ---
 
