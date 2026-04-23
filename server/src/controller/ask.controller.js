@@ -9,7 +9,7 @@ const ollama = new Ollama({
   },
 });
 
-const getSearchResults = async (questionEmbedding, topK = 5, filter = {}) => {
+const getSearchResults = async (questionEmbedding, topK = 10, filter = {}) => {
   const result = await index.query({
     vector: questionEmbedding,
     topK,

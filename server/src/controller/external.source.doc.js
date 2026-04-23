@@ -9,6 +9,7 @@ import { saveChunk } from "../db/documentChunks.repo.js";
 import { getOauthInstance } from "../services/googleoauth.service.js";
 import { google } from "googleapis";
 import { connection } from "../config/redisClient.js";
+import { PDFParse } from "pdf-parse";
 
 /** Service account clients, or user OAuth when `userAuth` is set */
 const getDriveDocsClients = (userAuth) => {
@@ -54,6 +55,25 @@ const fetchDocById = async (file, isUpdate = false, userAuth = null) => {
       buffer: res.data,
     });
     return result.value;
+  }
+  if (file.mimeType === "application/pdf") {
+    const res = await drive.files.get(
+      { fileId: file.id, alt: "media" },
+      { responseType: "arraybuffer" },
+    );
+    console.log("re", res);
+    const buffer = Buffer.from(res.data);
+
+    const parser = new PDFParse({ data: buffer });
+
+    const pdfData = await parser.getText();
+
+    console.log("textttt", pdfData.text);
+    return {
+      content: pdfData.text,
+      name: file.name,
+      docId: file.id,
+    };
   }
   if (file.mimeType === "application/vnd.google-apps.document") {
     const doc = await docs.documents.get({
@@ -116,17 +136,16 @@ const getGoogleDocsEmbedding = async (req, res) => {
       const userAuth = getOauthInstance(tokens);
       const result = await fetchDocById(req.body, false, userAuth);
       const text =
-        typeof result === "string" ? result : result?.content ?? "";
+        typeof result === "string" ? result : (result?.content ?? "");
       const docIdForMeta =
         typeof result === "object" && result?.docId != null
           ? result.docId
           : req.body.id;
       const chunks = chunkText(text);
 
-      console.log("chunks", chunks);
-
       for (let i = 0; i < chunks.length; i++) {
         const embedding = await createEmbedding(chunks[i]);
+        console.log("Em", embedding);
         await saveChunk({
           workspaceId: workspaceId,
           text: chunks[i],
@@ -198,12 +217,38 @@ const listGoogleDocsFiles = async (req, res) => {
       q: `
       mimeType='application/vnd.google-apps.document'
       or mimeType='application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+      or mimeType='application/pdf'
     `,
       fields: "files(id, name, mimeType, modifiedTime)",
       pageSize: 100,
     });
-    console.log("list, res", listRes);
     res.json({ files: listRes.data.files });
+  } catch (error) {
+    console.error("err", error);
+  }
+};
+
+const getMetaData = async (req, res) => {
+  try {
+    const workspace = [
+      {
+        name: "Finance",
+        id: 9001,
+      },
+      {
+        name: "HR",
+        id: 9002,
+      },
+      {
+        name: "Accounts",
+        id: 9003,
+      },
+      {
+        name: "Company Policy",
+        id: 9004,
+      },
+    ];
+    res.json({ workspace });
   } catch (error) {
     console.error("err", error);
   }
@@ -214,4 +259,5 @@ export {
   getGoogleDocsEmbedding,
   listenWebhook,
   listGoogleDocsFiles,
+  getMetaData,
 };

@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import "./App.css";
 
-const DEFAULT_WORKSPACE_ID = 2;
-
 function useApiBase() {
   return import.meta.env.VITE_API_BASE ?? "";
 }
@@ -31,13 +29,43 @@ export default function App() {
   const [embeddingId, setEmbeddingId] = useState(null);
   const [indexModalFile, setIndexModalFile] = useState(null);
   const [indexModalWorkspace, setIndexModalWorkspace] = useState("");
+  const [workspaces, setWorkspaces] = useState([]);
+  const [workspacesLoading, setWorkspacesLoading] = useState(true);
   const [question, setQuestion] = useState("");
-  const [workspaceId, setWorkspaceId] = useState(String(DEFAULT_WORKSPACE_ID));
+  const [workspaceId, setWorkspaceId] = useState("");
   const [answer, setAnswer] = useState("");
   const [asking, setAsking] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadMessage, setUploadMessage] = useState("");
   const [googleConnected, setGoogleConnected] = useState(null);
+
+  const loadWorkspaces = useCallback(async () => {
+    setWorkspacesLoading(true);
+    try {
+      const res = await fetch(api("/api/documents/get-metadata"));
+      const data = await parseJson(res);
+      if (!res.ok) {
+        throw new Error(data?.message || data?.error || res.statusText);
+      }
+      const list = Array.isArray(data?.workspace) ? data.workspace : [];
+      setWorkspaces(list);
+      setWorkspaceId((prev) => {
+        if (!list.length) {
+          return "";
+        }
+        const prevOk = list.some((w) => String(w.id) === String(prev));
+        if (prev && prevOk) {
+          return String(prev);
+        }
+        return String(list[0].id);
+      });
+    } catch {
+      setWorkspaces([]);
+      setWorkspaceId("");
+    } finally {
+      setWorkspacesLoading(false);
+    }
+  }, [api]);
 
   const refreshGoogleStatus = useCallback(async () => {
     try {
@@ -63,7 +91,8 @@ export default function App() {
       window.history.replaceState({}, "", window.location.pathname);
     }
     refreshGoogleStatus();
-  }, [refreshGoogleStatus]);
+    loadWorkspaces();
+  }, [refreshGoogleStatus, loadWorkspaces]);
 
   const loadUserDocs = useCallback(async () => {
     setLoadingDocs(true);
@@ -109,7 +138,10 @@ export default function App() {
   const openIndexModal = (file) => {
     setBanner(null);
     setIndexModalFile(file);
-    setIndexModalWorkspace(workspaceId.trim() || String(DEFAULT_WORKSPACE_ID));
+    const current = workspaceId.trim();
+    const valid = workspaces.some((w) => String(w.id) === current);
+    const first = workspaces[0] ? String(workspaces[0].id) : "";
+    setIndexModalWorkspace(valid ? current : first);
   };
 
   const closeIndexModal = () => {
@@ -120,8 +152,8 @@ export default function App() {
   const confirmEmbedDoc = async () => {
     if (!indexModalFile) return;
     const ws = Number(indexModalWorkspace);
-    if (!Number.isFinite(ws) || ws < 1) {
-      setBanner({ type: "error", text: "Enter a valid workspace ID (positive integer)." });
+    if (!Number.isFinite(ws) || ws < 1 || !workspaces.some((w) => Number(w.id) === ws)) {
+      setBanner({ type: "error", text: "Choose a workspace from the list." });
       return;
     }
     const file = indexModalFile;
@@ -158,6 +190,11 @@ export default function App() {
   const ask = async (e) => {
     e.preventDefault();
     if (!question.trim()) return;
+    const ws = Number(workspaceId);
+    if (!Number.isFinite(ws) || !workspaces.some((w) => Number(w.id) === ws)) {
+      setBanner({ type: "error", text: "Select a workspace." });
+      return;
+    }
     setAsking(true);
     setAnswer("");
     setBanner(null);
@@ -167,7 +204,7 @@ export default function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           question: question.trim(),
-          workspaceId: Number(workspaceId) || DEFAULT_WORKSPACE_ID,
+          workspaceId: ws,
         }),
       });
       const data = await parseJson(res);
@@ -249,7 +286,7 @@ export default function App() {
       <section>
         <h2>Your Google Docs &amp; Word files</h2>
         <p className="muted">
-          Indexing asks for a workspace ID first; chunks are stored under that ID for RAG filters.
+          When indexing, pick a workspace from the list (same list as Ask). Chunks are stored under that ID for RAG filters.
         </p>
         {files.length === 0 && <p className="muted">No files loaded yet.</p>}
         {files.length > 0 && (
@@ -276,24 +313,37 @@ export default function App() {
       <section>
         <h2>Ask (RAG)</h2>
         <p className="muted">
-          Uses <code>/api/cloud/ask</code> with Pinecone filters. Use the same workspace ID you chose when indexing.
+          Uses <code>/api/cloud/ask</code> with Pinecone filters. Workspaces come from <code>/api/documents/get-metadata</code>.
         </p>
         <form onSubmit={ask}>
           <div className="field">
-            <label htmlFor="ws">Workspace ID</label>
-            <input
+            <label htmlFor="ws">Workspace</label>
+            <select
               id="ws"
-              type="number"
-              min={1}
               value={workspaceId}
               onChange={(ev) => setWorkspaceId(ev.target.value)}
-            />
+              disabled={workspacesLoading || workspaces.length === 0}
+            >
+              {workspacesLoading && <option value="">Loading workspaces…</option>}
+              {!workspacesLoading && workspaces.length === 0 && (
+                <option value="">No workspaces (check get-metadata)</option>
+              )}
+              {!workspacesLoading &&
+                workspaces.map((w) => (
+                  <option key={w.id} value={String(w.id)}>
+                    {w.name} ({w.id})
+                  </option>
+                ))}
+            </select>
           </div>
           <div className="field">
             <label htmlFor="q">Question</label>
             <textarea id="q" value={question} onChange={(ev) => setQuestion(ev.target.value)} />
           </div>
-          <button type="submit" disabled={asking}>
+          <button
+            type="submit"
+            disabled={asking || workspacesLoading || workspaces.length === 0 || !workspaceId}
+          >
             {asking ? "Asking…" : "Ask"}
           </button>
         </form>
@@ -328,21 +378,40 @@ export default function App() {
               Document: <strong>{indexModalFile.name}</strong>
             </p>
             <div className="field">
-              <label htmlFor="index-ws">Workspace ID</label>
-              <input
+              <label htmlFor="index-ws">Workspace</label>
+              <select
                 id="index-ws"
-                type="number"
-                min={1}
                 value={indexModalWorkspace}
                 onChange={(ev) => setIndexModalWorkspace(ev.target.value)}
+                disabled={workspacesLoading || workspaces.length === 0}
                 autoFocus
-              />
+              >
+                {workspacesLoading && <option value="">Loading workspaces…</option>}
+                {!workspacesLoading && workspaces.length === 0 && (
+                  <option value="">No workspaces</option>
+                )}
+                {!workspacesLoading &&
+                  workspaces.map((w) => (
+                    <option key={w.id} value={String(w.id)}>
+                      {w.name} ({w.id})
+                    </option>
+                  ))}
+              </select>
             </div>
             <div className="actions">
               <button type="button" className="secondary" onClick={closeIndexModal}>
                 Cancel
               </button>
-              <button type="button" onClick={confirmEmbedDoc} disabled={!!embeddingId}>
+              <button
+                type="button"
+                onClick={confirmEmbedDoc}
+                disabled={
+                  !!embeddingId ||
+                  workspacesLoading ||
+                  workspaces.length === 0 ||
+                  !indexModalWorkspace
+                }
+              >
                 {embeddingId ? "Indexing…" : "Start indexing"}
               </button>
             </div>
