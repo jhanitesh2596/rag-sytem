@@ -20,7 +20,7 @@ const GOOGLE_TOKEN_KEY = "google:token:20";
 
 const getGoogleConnectionStatus = async (req, res) => {
   try {
-    const tokens = await connection.hgetall(GOOGLE_TOKEN_KEY);
+    const tokens = await connection.hgetall(GOOGLE_TOKEN_KEY, );
     const connected = Boolean(
       tokens &&
         Object.keys(tokens).length > 0 &&
@@ -46,6 +46,7 @@ const handleGoogleCallback = async (req, res) => {
     const { tokens } = await googleOAuth.getToken(code);
     googleOAuth.setCredentials(tokens);
     await connection.hset(GOOGLE_TOKEN_KEY, tokens);
+    await connection.expire(GOOGLE_TOKEN_KEY, 604799)
     return res.redirect(`${frontendUrl}?google=connected`);
   } catch (error) {
     console.error(error);

@@ -38,6 +38,7 @@ export default function App() {
   const [uploading, setUploading] = useState(false);
   const [uploadMessage, setUploadMessage] = useState("");
   const [googleConnected, setGoogleConnected] = useState(null);
+  const [errMsg, setErrMsg] = useState(null);
 
   const loadWorkspaces = useCallback(async () => {
     setWorkspacesLoading(true);
@@ -81,7 +82,10 @@ export default function App() {
     const params = new URLSearchParams(window.location.search);
     const google = params.get("google");
     if (google === "connected") {
-      setBanner({ type: "success", text: "Google account connected. You can load your documents." });
+      setBanner({
+        type: "success",
+        text: "Google account connected. You can load your documents.",
+      });
       window.history.replaceState({}, "", window.location.pathname);
     } else if (google === "error") {
       setBanner({
@@ -106,12 +110,17 @@ export default function App() {
       setFiles(data.files || []);
       await refreshGoogleStatus();
       if (!data.files?.length) {
-        setBanner({ type: "success", text: "Connected, but no Google Docs or Word files were returned." });
+        setBanner({
+          type: "success",
+          text: "Connected, but no Google Docs or Word files were returned.",
+        });
       }
     } catch (e) {
       setBanner({
         type: "error",
-        text: e.message || "Could not load documents. Connect Google first and ensure Redis stores tokens.",
+        text:
+          e.message ||
+          "Could not load documents. Connect Google first and ensure Redis stores tokens.",
       });
       setFiles([]);
     } finally {
@@ -130,7 +139,10 @@ export default function App() {
       }
       window.location.href = data.url;
     } catch (e) {
-      setBanner({ type: "error", text: e.message || "Failed to start Google sign-in" });
+      setBanner({
+        type: "error",
+        text: e.message || "Failed to start Google sign-in",
+      });
       setConnecting(false);
     }
   };
@@ -152,7 +164,11 @@ export default function App() {
   const confirmEmbedDoc = async () => {
     if (!indexModalFile) return;
     const ws = Number(indexModalWorkspace);
-    if (!Number.isFinite(ws) || ws < 1 || !workspaces.some((w) => Number(w.id) === ws)) {
+    if (
+      !Number.isFinite(ws) ||
+      ws < 1 ||
+      !workspaces.some((w) => Number(w.id) === ws)
+    ) {
       setBanner({ type: "error", text: "Choose a workspace from the list." });
       return;
     }
@@ -171,9 +187,14 @@ export default function App() {
         }),
       });
       const data = await parseJson(res);
+      if (res?.status == 409) {
+        setErrMsg("Document already embedded for this workspace.");
+        return;
+      }
       if (!res.ok) {
         throw new Error(data?.message || data?.error || res.statusText);
       }
+
       setWorkspaceId(String(ws));
       setBanner({
         type: "success",
@@ -237,7 +258,9 @@ export default function App() {
       if (!res.ok) {
         throw new Error(data?.error || data?.message || res.statusText);
       }
-      setUploadMessage(`Upload accepted. documentId: ${data.documentId} (${data.status})`);
+      setUploadMessage(
+        `Upload accepted. documentId: ${data.documentId} (${data.status})`,
+      );
     } catch (err) {
       setBanner({ type: "error", text: err.message || "Upload failed" });
     } finally {
@@ -249,11 +272,18 @@ export default function App() {
     <div className="app">
       <header>
         <h1>Sourceframe</h1>
-        <p>Connect Google, index a document, then ask questions against your workspace.</p>
+        <p>
+          Connect Google, index a document, then ask questions against your
+          workspace.
+        </p>
       </header>
 
       {banner && (
-        <div className={`banner ${banner.type === "error" ? "error" : "success"}`}>{banner.text}</div>
+        <div
+          className={`banner ${banner.type === "error" ? "error" : "success"}`}
+        >
+          {banner.text}
+        </div>
       )}
 
       <section>
@@ -269,15 +299,24 @@ export default function App() {
             <span className="status-pill">Not connected</span>
           )}
         </div>
-        <p className="muted">
-          Opens Google OAuth, then returns here. The server must use the same redirect URL registered in Google
-          Cloud (currently <code>http://localhost:5001/api/auth/google/callback</code>).
-        </p>
         <div className="row" style={{ marginTop: "0.75rem" }}>
-          <button type="button" onClick={startGoogleConnect} disabled={connecting}>
-            {connecting ? "Redirecting…" : googleConnected ? "Reconnect Google" : "Connect Google"}
+          <button
+            type="button"
+            onClick={startGoogleConnect}
+            disabled={connecting}
+          >
+            {connecting
+              ? "Redirecting…"
+              : googleConnected
+                ? "Reconnect Google"
+                : "Connect Google"}
           </button>
-          <button type="button" className="secondary" onClick={loadUserDocs} disabled={loadingDocs}>
+          <button
+            type="button"
+            className="secondary"
+            onClick={loadUserDocs}
+            disabled={loadingDocs}
+          >
             {loadingDocs ? "Loading…" : "Refresh my Google Docs"}
           </button>
         </div>
@@ -286,7 +325,8 @@ export default function App() {
       <section>
         <h2>Your Google Docs &amp; Word files</h2>
         <p className="muted">
-          When indexing, pick a workspace from the list (same list as Ask). Chunks are stored under that ID for RAG filters.
+          When indexing, pick a workspace from the list (same list as Ask).
+          Chunks are stored under that ID for RAG filters.
         </p>
         {files.length === 0 && <p className="muted">No files loaded yet.</p>}
         {files.length > 0 && (
@@ -313,7 +353,8 @@ export default function App() {
       <section>
         <h2>Ask (RAG)</h2>
         <p className="muted">
-          Uses <code>/api/cloud/ask</code> with Pinecone filters. Workspaces come from <code>/api/documents/get-metadata</code>.
+          Uses <code>/api/cloud/ask</code> with Pinecone filters. Workspaces
+          come from <code>/api/documents/get-metadata</code>.
         </p>
         <form onSubmit={ask}>
           <div className="field">
@@ -324,7 +365,9 @@ export default function App() {
               onChange={(ev) => setWorkspaceId(ev.target.value)}
               disabled={workspacesLoading || workspaces.length === 0}
             >
-              {workspacesLoading && <option value="">Loading workspaces…</option>}
+              {workspacesLoading && (
+                <option value="">Loading workspaces…</option>
+              )}
               {!workspacesLoading && workspaces.length === 0 && (
                 <option value="">No workspaces (check get-metadata)</option>
               )}
@@ -338,11 +381,20 @@ export default function App() {
           </div>
           <div className="field">
             <label htmlFor="q">Question</label>
-            <textarea id="q" value={question} onChange={(ev) => setQuestion(ev.target.value)} />
+            <textarea
+              id="q"
+              value={question}
+              onChange={(ev) => setQuestion(ev.target.value)}
+            />
           </div>
           <button
             type="submit"
-            disabled={asking || workspacesLoading || workspaces.length === 0 || !workspaceId}
+            disabled={
+              asking ||
+              workspacesLoading ||
+              workspaces.length === 0 ||
+              !workspaceId
+            }
           >
             {asking ? "Asking…" : "Ask"}
           </button>
@@ -357,22 +409,18 @@ export default function App() {
         )}
       </section>
 
-      <section>
-        <h2>Upload file</h2>
-        <p className="muted">POSTs to <code>/api/documents/upload</code> (multipart). Server ingests asynchronously.</p>
-        <div className="file-row">
-          <input type="file" onChange={onUpload} disabled={uploading} />
-        </div>
-        {uploadMessage && <p className="muted" style={{ marginTop: "0.65rem" }}>{uploadMessage}</p>}
-      </section>
-
       {indexModalFile && (
         <div
           className="modal-backdrop"
           role="presentation"
           onClick={(e) => e.target === e.currentTarget && closeIndexModal()}
         >
-          <div className="modal" role="dialog" aria-modal="true" aria-labelledby="index-modal-title">
+          <div
+            className="modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="index-modal-title"
+          >
             <h3 id="index-modal-title">Workspace for indexing</h3>
             <p className="muted" style={{ margin: "0 0 0.85rem" }}>
               Document: <strong>{indexModalFile.name}</strong>
@@ -386,7 +434,9 @@ export default function App() {
                 disabled={workspacesLoading || workspaces.length === 0}
                 autoFocus
               >
-                {workspacesLoading && <option value="">Loading workspaces…</option>}
+                {workspacesLoading && (
+                  <option value="">Loading workspaces…</option>
+                )}
                 {!workspacesLoading && workspaces.length === 0 && (
                   <option value="">No workspaces</option>
                 )}
@@ -398,8 +448,13 @@ export default function App() {
                   ))}
               </select>
             </div>
+            {!!errMsg && <div className="bg-red-300 p-2 rounded-md">{errMsg}</div>}
             <div className="actions">
-              <button type="button" className="secondary" onClick={closeIndexModal}>
+              <button
+                type="button"
+                className="secondary"
+                onClick={closeIndexModal}
+              >
                 Cancel
               </button>
               <button

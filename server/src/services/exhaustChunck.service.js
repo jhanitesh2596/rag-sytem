@@ -15,8 +15,6 @@ export function cosineSimilarity(a, b) {
 }
 
 export async function searchSimilar(queryEmbedding, k = 3) {
-  
-
   const result = chunks
     .map((c) => ({
       ...c,
@@ -24,9 +22,5 @@ export async function searchSimilar(queryEmbedding, k = 3) {
     }))
     .sort((a, b) => b.score - a.score)
     .slice(0, k);
-  console.log(
-    "Top matches:",
-    result.map((r) => ({ text: r.text.slice(0, 50), score: r.score }))
-  );
   return result
 }

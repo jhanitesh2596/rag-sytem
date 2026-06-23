@@ -32,11 +32,7 @@ const handleRag = async (req, res) => {
     workspaceId,
   };
   const queryResult = await getSearchResults(queryEmbedding, 5, filter);
-  console.log("queryResult", queryResult);
   const context = queryResult.map((r) => r.text).join("\n\n");
-
-  console.log("context", context);
-
   const response = await ollama.chat({
     model: "gpt-oss:20b",
     messages: [
@@ -50,7 +46,7 @@ Rules:
 - Use ONLY the provided context.
 - Do NOT mention the document.
 - If the answer is not explicitly present, reply exactly:
-"Not present in the document."
+"Not present in the context. Please contact support"
       `.trim(),
       },
       {
@@ -91,9 +87,8 @@ Keep the tone professional and brief. Use markdown for lists and bold where help
       ],
       temperature: 0.4,
     });
-    console.log(res);
   } catch (error) {
-    console.error("err:", error);
+    console.error(error);
   }
 };
 

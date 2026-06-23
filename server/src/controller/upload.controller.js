@@ -6,7 +6,7 @@ const uploadFile = (req, res) => {
       return res.status(400).json({ error: "No file uploaded" });
     }
     const documentId = uuid();
-    ingestDocument(req.file.path, documentId).catch((e) => console.error("eee",e));
+    ingestDocument(req.file.path, documentId).catch((e) => console.error(e));
     res.json({
       documentId,
       status: "processing",

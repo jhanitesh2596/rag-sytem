@@ -1,7 +1,7 @@
 import "dotenv/config";
 import { v4 as uuid } from "uuid";
 import { listGoogleDocs } from "../services/googleDocs.service.js";
-import { docsClient, driveClient, googleOAuth } from "../config/google.auth.js";
+import { docsClient, driveClient } from "../config/google.auth.js";
 import mammoth from "mammoth";
 import { chunkText } from "../services/chunk.service.js";
 import { createEmbedding } from "../services/embedding.service.js";
@@ -11,7 +11,6 @@ import { google } from "googleapis";
 import { connection } from "../config/redisClient.js";
 import { PDFParse } from "pdf-parse";
 
-/** Service account clients, or user OAuth when `userAuth` is set */
 const getDriveDocsClients = (userAuth) => {
   if (userAuth) {
     return {
@@ -27,7 +26,7 @@ const getGoogleDocs = async (req, res) => {
     const docs = await listGoogleDocs();
     res.json({ docs });
   } catch (error) {
-    console.error("err", error);
+    console.error(error);
   }
 };
 
@@ -61,14 +60,11 @@ const fetchDocById = async (file, isUpdate = false, userAuth = null) => {
       { fileId: file.id, alt: "media" },
       { responseType: "arraybuffer" },
     );
-    console.log("re", res);
     const buffer = Buffer.from(res.data);
 
     const parser = new PDFParse({ data: buffer });
 
     const pdfData = await parser.getText();
-
-    console.log("textttt", pdfData.text);
     return {
       content: pdfData.text,
       name: file.name,
@@ -141,11 +137,18 @@ const getGoogleDocsEmbedding = async (req, res) => {
         typeof result === "object" && result?.docId != null
           ? result.docId
           : req.body.id;
+      const redisKey = `stored-doc-id:${docIdForMeta}`;
+      const existing = await connection.hgetall(redisKey);
+      if (
+        existing.docId == docIdForMeta &&
+        existing.workspaceId == workspaceId
+      ) {
+        res.status(409).json({ msg: "Document alread exists" });
+        return;
+      }
       const chunks = chunkText(text);
-
       for (let i = 0; i < chunks.length; i++) {
         const embedding = await createEmbedding(chunks[i]);
-        console.log("Em", embedding);
         await saveChunk({
           workspaceId: workspaceId,
           text: chunks[i],
@@ -162,21 +165,26 @@ const getGoogleDocsEmbedding = async (req, res) => {
           : { docId: docIdForMeta },
         userAuth,
       );
+      await connection.hset(redisKey, {
+        docId: docIdForMeta,
+        workspaceId: workspaceId,
+      });
       res.json({ result });
       return;
     }
     const allDocs = await listGoogleDocs();
     const docFiles = await allDocs?.map(async (li) => await fetchDocById(li));
     const result = await Promise.all(docFiles);
+
     res.json({ file: result });
   } catch (error) {
-    console.error("err-gd", error);
+    console.error(error);
+    res.end();
   }
 };
 
 const handleUpdate = async (file) => {
   try {
-    console.log("inup", file);
     const result = await fetchDocById(file, true);
     const chunks = chunkText(result.content);
 
@@ -193,14 +201,12 @@ const handleUpdate = async (file) => {
       });
     }
   } catch (error) {
-    console.error("errrr", error);
+    console.error(error);
   }
 };
 
 const listenWebhook = async (req, res) => {
-  res.status(200).send("OK"); // must respond immediately
-  console.log("req55", req.headers);
-  const resourceId = req.headers["x-goog-resource-id"];
+  res.status(200).send("OK");
   const fileId = req.headers["x-goog-resource-uri"]?.split("files/")[1];
   await handleUpdate(fileId, true);
   if (!fileId) return;
@@ -209,7 +215,6 @@ const listenWebhook = async (req, res) => {
 const listGoogleDocsFiles = async (req, res) => {
   try {
     const tokens = await connection.hgetall(`google:token:20`);
-    console.log("req.session", tokens);
     const auth = getOauthInstance(tokens);
     const drive = google.drive({ version: "v3", auth });
 
@@ -222,9 +227,10 @@ const listGoogleDocsFiles = async (req, res) => {
       fields: "files(id, name, mimeType, modifiedTime)",
       pageSize: 100,
     });
-    res.json({ files: listRes.data.files });
+    res.json({ files: listRes?.data?.files });
   } catch (error) {
-    console.error("err", error);
+    console.error(error);
+    res.end();
   }
 };
 
@@ -250,7 +256,7 @@ const getMetaData = async (req, res) => {
     ];
     res.json({ workspace });
   } catch (error) {
-    console.error("err", error);
+    console.error(error);
   }
 };
 

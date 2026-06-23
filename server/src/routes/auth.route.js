@@ -4,11 +4,12 @@ import {
   getGoogleRedirectUrl,
   handleGoogleCallback,
 } from "../controller/google.auth.controller.js";
+import { asyncHandler } from "../utils/asyncHandler.js";
 
 const router = Router();
 
-router.get("/google-status", getGoogleConnectionStatus);
-router.get("/google-redirect", getGoogleRedirectUrl);
-router.get("/google/callback", handleGoogleCallback);
+router.get("/google-status", asyncHandler(getGoogleConnectionStatus));
+router.get("/google-redirect", asyncHandler(getGoogleRedirectUrl));
+router.get("/google/callback", asyncHandler(handleGoogleCallback));
 
 export default router;

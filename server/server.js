@@ -33,11 +33,10 @@ app.use("/api/cloud", askRouter);
 app.use("/api/webhook", webhookRoute);
 
 /* 404 handler */
-app.use((req, res) => {
-  res.status(404).json({
-    success: false,
-    message: "Route not found",
-  });
+app.use((req) => {
+  const err = new Error(`Route not found: ${req.originalUrl}`);
+  err.statusCode = 404;
+  next(err);
 });
 
 app.use(errorHandler);
