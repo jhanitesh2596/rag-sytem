@@ -22,7 +22,7 @@ export async function saveChunk({ workspaceId, text, embedding, metadata }) {
 export async function alreadyExists(docid) {
   try {
     const res = await index.namespace(process.env.PINECONE_DB).query({
-      vector: new Array(768).fill(0), // dimension must match your index
+      vector: new Array(768).fill(0),
       topK: 1,
       includeMetadata: true,
       filter: {
