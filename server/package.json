@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "nodemon --max-old-space-size=4096 --watch ./server.js",
+    "dev": "nodemon --max-old-space-size=4096 --watch .",
     "start": "node server.js"
   },
   "keywords": [],

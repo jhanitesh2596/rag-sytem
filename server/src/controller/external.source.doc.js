@@ -139,11 +139,16 @@ const getGoogleDocsEmbedding = async (req, res) => {
           : req.body.id;
       const redisKey = `stored-doc-id:${docIdForMeta}`;
       const existing = await connection.hgetall(redisKey);
+      const isAlreadyMember = await connection.sismember(
+        `stored-doc-workspaces:${docIdForMeta}`,
+        String(workspaceId),
+      );
       if (
-        existing.docId == docIdForMeta &&
-        existing.workspaceId == workspaceId
+        isAlreadyMember ||
+        (existing.docId == docIdForMeta &&
+          Number(existing.workspaceId) === workspaceId)
       ) {
-        res.status(409).json({ msg: "Document alread exists" });
+        res.status(409).json({ message: "Document already exists for this workspace." });
         return;
       }
       const chunks = chunkText(text);
@@ -165,11 +170,15 @@ const getGoogleDocsEmbedding = async (req, res) => {
           : { docId: docIdForMeta },
         userAuth,
       );
+      await connection.sadd(
+        `stored-doc-workspaces:${docIdForMeta}`,
+        String(workspaceId),
+      );
       await connection.hset(redisKey, {
         docId: docIdForMeta,
         workspaceId: workspaceId,
       });
-      res.json({ result });
+      res.json({ result, workspaceId });
       return;
     }
     const allDocs = await listGoogleDocs();
@@ -227,7 +236,32 @@ const listGoogleDocsFiles = async (req, res) => {
       fields: "files(id, name, mimeType, modifiedTime)",
       pageSize: 100,
     });
-    res.json({ files: listRes?.data?.files });
+    const rawFiles = listRes?.data?.files || [];
+    const filesWithWorkspaces = await Promise.all(
+      rawFiles.map(async (file) => {
+        let wsSet = await connection.smembers(`stored-doc-workspaces:${file.id}`);
+        let workspaces = Array.isArray(wsSet)
+          ? wsSet.map(Number).filter((n) => Number.isFinite(n) && n > 0)
+          : [];
+
+        // Check fallback stored-doc-id key if set was empty
+        if (workspaces.length === 0) {
+          const oldData = await connection.hgetall(`stored-doc-id:${file.id}`);
+          if (oldData?.workspaceId) {
+            const oldWs = Number(oldData.workspaceId);
+            if (Number.isFinite(oldWs) && oldWs > 0) {
+              workspaces = [oldWs];
+              await connection.sadd(`stored-doc-workspaces:${file.id}`, String(oldWs));
+            }
+          }
+        }
+        return {
+          ...file,
+          indexedWorkspaces: workspaces,
+        };
+      }),
+    );
+    res.json({ files: filesWithWorkspaces });
   } catch (error) {
     console.error(error);
     res.end();
