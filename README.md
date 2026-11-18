@@ -4,7 +4,7 @@ RAG-style document Q&A: connect a Google account, index Google Docs, PDF & Word 
 
 ---
 
-## Repository layout
+## Repository layout test base
 
 | Path | Role |
 |------|------|
